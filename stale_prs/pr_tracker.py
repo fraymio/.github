@@ -123,7 +123,8 @@ def list_old_open_prs_for_org(output_file):
 
 
 if __name__ == "__main__":
-    output_file = Path(f"output/open_prs_{datetime.now().strftime('%Y-%m-%d_%H,%M,%S')}.csv")
+    script_path = Path(os.path.realpath(__file__)).parent
+    output_file = Path(f"{script_path}/output/open_prs_{datetime.now().strftime('%Y-%m-%d_%H,%M,%S')}.csv")
     output_file.parent.mkdir(parents=True, exist_ok=True)
     list_old_open_prs_for_org(output_file)
     print(f"Data written to {output_file}")
