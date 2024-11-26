@@ -63,33 +63,32 @@ def get_open_prs_for_repo(repo_name, csv_writer):
         url = f"https://api.github.com/repos/{ORG_NAME}/{repo_name}/pulls?page={page}&per_page=100"
         response = requests.get(url, headers=headers)
 
-        if response.status_code == 200:
-            open_prs = response.json()
-            if not open_prs:
-                break  # No more PRs, exit the loop
-
-            today = datetime.utcnow()
-
-            for pr in open_prs:
-                created_at = datetime.strptime(pr["created_at"], "%Y-%m-%dT%H:%M:%SZ")
-                business_days_open = get_business_days_difference(created_at, today)
-
-                if business_days_open > SLA:
-                    pr_branch: str = pr["head"]["ref"]
-                    if pr_branch.startswith("dependabot"):
-                        return
-                    pr_link = pr["html_url"]
-                    time_open = today - created_at
-
-                    # Write data to CSV
-                    csv_writer.writerow([repo_name, pr_branch, pr_link, time_open.days])
-
-            page += 1  # Fetch the next page
-        else:
+        if response.status_code != 200:
             print(
                 f"Failed to fetch PRs for repo {repo_name}: {response.status_code} - {response.text}"
             )
             break
+        open_prs = response.json()
+        if not open_prs:
+            break  # No more PRs, exit the loop
+
+        today = datetime.utcnow()
+
+        for pr in open_prs:
+            created_at = datetime.strptime(pr["created_at"], "%Y-%m-%dT%H:%M:%SZ")
+            business_days_open = get_business_days_difference(created_at, today)
+
+            if business_days_open > SLA:
+                pr_branch: str = pr["head"]["ref"]
+                if pr_branch.startswith("dependabot"):
+                    return
+                pr_link = pr["html_url"]
+                time_open = today - created_at
+
+                # Write data to CSV
+                csv_writer.writerow([repo_name, pr_branch, pr_link, time_open.days])
+
+        page += 1  # Fetch the next page
 
 
 def list_old_open_prs_for_org(output_file):
@@ -124,7 +123,9 @@ def list_old_open_prs_for_org(output_file):
 
 if __name__ == "__main__":
     script_path = Path(os.path.realpath(__file__)).parent
-    output_file = Path(f"{script_path}/output/open_prs_{datetime.now().strftime('%Y-%m-%d_%H,%M,%S')}.csv")
+    output_file = Path(
+        f"{script_path}/output/open_prs_{datetime.now().strftime('%Y-%m-%d_%H,%M,%S')}.csv"
+    )
     output_file.parent.mkdir(parents=True, exist_ok=True)
     list_old_open_prs_for_org(output_file)
     print(f"Data written to {output_file}")
