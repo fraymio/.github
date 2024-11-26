@@ -56,7 +56,7 @@ def get_business_days_difference(start_date, end_date):
     return business_days
 
 
-def get_open_prs_for_repo(repo_name, csv_writer):
+def add_old_prs_for_repo(repo_name, csv_writer):
     """Fetch and list open PRs for a specific repository, handling pagination."""
     page = 1
     while True:
@@ -111,7 +111,7 @@ def list_old_open_prs_for_org(output_file):
                     repo_name = repo["name"]
                     if repo_name in REPO_BLACKLIST:
                         continue
-                    get_open_prs_for_repo(repo_name, csv_writer)
+                    add_old_prs_for_repo(repo_name, csv_writer)
 
                 page += 1  # Fetch the next page of repositories
             else:
