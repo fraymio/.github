@@ -93,10 +93,10 @@ def add_old_prs_for_repo(repo_name, csv_writer):
 
 def list_old_open_prs_for_org(output_file):
     """Fetch all repositories under an organization, handling pagination, and list old open PRs in a CSV."""
-    page = 1
     with open(output_file, mode="w", newline="", encoding="utf-8") as file:
         csv_writer = csv.writer(file)
         csv_writer.writerow(["repo", "branch", "pr_link", "days_open"])
+        page = 1
 
         while True:
             response = requests.get(
