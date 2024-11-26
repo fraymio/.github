@@ -3,6 +3,7 @@ Generates a report of PRs in the fraymio org that have not had a completed revie
 over a preset number of days
 """
 
+from pathlib import Path
 import requests
 from datetime import datetime, timedelta
 import csv
@@ -122,6 +123,7 @@ def list_old_open_prs_for_org(output_file):
 
 
 if __name__ == "__main__":
-    output_file = "open_prs.csv"
+    output_file = Path(f"output/open_prs_{datetime.now().strftime('%Y-%m-%d_%H,%M,%S')}.csv")
+    output_file.parent.mkdir(parents=True, exist_ok=True)
     list_old_open_prs_for_org(output_file)
     print(f"Data written to {output_file}")
