@@ -1,0 +1,73 @@
+name: AI PR review
+
+# Reusable workflow. Repos opt in by adding a caller workflow, e.g.:
+#
+#   on:
+#     pull_request:
+#       types: [opened, ready_for_review]
+#   jobs:
+#     review:
+#       uses: fraymio/.github/.github/workflows/pr-review.yml@main
+#       permissions:
+#         contents: read
+#         pull-requests: write
+#       secrets: inherit
+#
+# See workflow-templates/ai-pr-review.yml for the full template.
+
+on:
+  workflow_call:
+    inputs:
+      model:
+        description: "OpenAI model ID"
+        type: string
+        default: gpt-6-astra
+      reasoning_effort:
+        description: "low | medium | high | xhigh | max"
+        type: string
+        default: medium
+      tools_ref:
+        description: "Ref of fraymio/.github to load the review script from"
+        type: string
+        default: main
+    secrets:
+      OPENAI_API_KEY:
+        required: true
+
+jobs:
+  review:
+    # Skip drafts (reviewed on ready_for_review), bots, and fork PRs (no secrets there).
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.user.type != 'Bot' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: fraymio/.github
+          ref: ${{ inputs.tools_ref }}
+          sparse-checkout: pr_review
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: pr_review/requirements.txt
+
+      - run: pip install -r pr_review/requirements.txt
+
+      - name: Review PR
+        run: python pr_review/review.py
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ inputs.model }}
+          REASONING_EFFORT: ${{ inputs.reasoning_effort }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
