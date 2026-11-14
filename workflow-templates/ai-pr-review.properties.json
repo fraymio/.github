@@ -1,0 +1,6 @@
+{
+  "name": "AI PR review",
+  "description": "Posts an OpenAI (gpt-6-astra) review comment on every new pull request.",
+  "iconName": "octicon code-review",
+  "categories": ["Automation"]
+}
