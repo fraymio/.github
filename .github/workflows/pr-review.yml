@@ -27,7 +27,7 @@ on:
         type: string
         default: medium
       tools_ref:
-        description: "Ref of fraymio/.github to load the review script from"
+        description: "Fallback ref of fraymio/.github to load the review script from (only used if job.workflow_sha is unavailable)"
         type: string
         default: main
     secrets:
@@ -47,18 +47,19 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      # Load the script from the same commit this reusable workflow runs from, so
+      # a caller pinned to a branch/tag/SHA gets the matching script. Falls back
+      # to tools_ref where the job.workflow_* context isn't available.
       - uses: actions/checkout@v7
         with:
-          repository: fraymio/.github
-          ref: ${{ inputs.tools_ref }}
+          repository: ${{ job.workflow_repository || 'fraymio/.github' }}
+          ref: ${{ job.workflow_sha || inputs.tools_ref }}
           sparse-checkout: pr_review
           persist-credentials: false
 
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-          cache: pip
-          cache-dependency-path: pr_review/requirements.txt
 
       - run: pip install -r pr_review/requirements.txt
 
