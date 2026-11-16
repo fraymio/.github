@@ -79,8 +79,9 @@ def ask_model(pr: dict, diff: str) -> str:
             "instructions": SYSTEM_PROMPT,
             "input": user_input,
             "reasoning": {"effort": REASONING_EFFORT},
+            "max_output_tokens": 64_000,
         },
-        timeout=600,
+        timeout=1500,
     )
     if resp.status_code != 200:
         raise RuntimeError(f"OpenAI error {resp.status_code}: {resp.text}")
