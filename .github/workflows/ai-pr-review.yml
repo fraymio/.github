@@ -1,0 +1,16 @@
+name: AI PR review
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+
+jobs:
+  review:
+    uses: ./.github/workflows/pr-review.yml
+    permissions:
+      contents: read
+      pull-requests: write
+    secrets: inherit
+    with:
+      # Load the script from the PR branch so changes to it are tested here.
+      tools_ref: ${{ github.head_ref }}

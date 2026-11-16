@@ -1,0 +1,74 @@
+name: AI PR review
+
+# Reusable workflow. Repos opt in by adding a caller workflow, e.g.:
+#
+#   on:
+#     pull_request:
+#       types: [opened]
+#   jobs:
+#     review:
+#       uses: fraymio/.github/.github/workflows/pr-review.yml@main
+#       permissions:
+#         contents: read
+#         pull-requests: write
+#       secrets: inherit
+#
+# See workflow-templates/ai-pr-review.yml for the full template.
+
+on:
+  workflow_call:
+    inputs:
+      model:
+        description: "OpenAI model ID"
+        type: string
+        default: gpt-6-astra
+      reasoning_effort:
+        description: "low | medium | high | xhigh | max"
+        type: string
+        default: medium
+      tools_ref:
+        description: "Fallback ref of fraymio/.github to load the review script from (only used if job.workflow_sha is unavailable)"
+        type: string
+        default: main
+    secrets:
+      OPENAI_API_KEY:
+        required: true
+
+jobs:
+  review:
+    # Skip drafts (reviewed on ready_for_review), bots, and fork PRs (no secrets there).
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.user.type != 'Bot' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # Load the script from the same commit this reusable workflow runs from, so
+      # a caller pinned to a branch/tag/SHA gets the matching script. Falls back
+      # to tools_ref where the job.workflow_* context isn't available.
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository || 'fraymio/.github' }}
+          ref: ${{ job.workflow_sha || inputs.tools_ref }}
+          sparse-checkout: pr_review
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - run: pip install -r pr_review/requirements.txt
+
+      - name: Review PR
+        run: python pr_review/review.py
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ inputs.model }}
+          REASONING_EFFORT: ${{ inputs.reasoning_effort }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
