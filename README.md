@@ -22,6 +22,7 @@ jobs:
     # with:
     #   model: gpt-6-astra
     #   reasoning_effort: medium   # low | medium | high | xhigh | max
+    #   exclude: "frontend/src/api_service/**, *.ipynb"   # on top of lock files + minified output
 ```
 
 **Secret:** `OPENAI_API_KEY` as an org secret (Org settings → Secrets → Actions), shared with the opted-in repos. No other token is needed: each repo's built-in `GITHUB_TOKEN` posts the review.
