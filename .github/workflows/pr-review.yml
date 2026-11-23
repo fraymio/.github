@@ -26,6 +26,10 @@ on:
         description: "low | medium | high | xhigh | max"
         type: string
         default: medium
+      exclude:
+        description: "Extra glob patterns to leave out of the review (comma or newline separated), on top of lock files and minified output"
+        type: string
+        default: ""
       tools_ref:
         description: "Fallback ref of fraymio/.github to load the review script from (only used if job.workflow_sha is unavailable)"
         type: string
@@ -70,5 +74,6 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ inputs.model }}
           REASONING_EFFORT: ${{ inputs.reasoning_effort }}
+          EXTRA_EXCLUDE: ${{ inputs.exclude }}
           REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
