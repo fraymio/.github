@@ -9,14 +9,36 @@ Env vars:
   PR_NUMBER         pull request number (required)
   OPENAI_MODEL      model ID (default: gpt-6-astra)
   REASONING_EFFORT  low | medium | high | xhigh | max (default: medium)
+  EXTRA_EXCLUDE     extra glob patterns to drop from the diff, comma or newline separated
   DRY_RUN           if "true", print the review instead of posting it
 """
 
 import os
+import re
+from fnmatch import fnmatch
 
 import requests
 
 MAX_DIFF_CHARS = 400_000
+
+# Files that are generated or carry no reviewable logic. Patterns without a "/"
+# match the file name anywhere in the tree; patterns with one match the full path.
+DEFAULT_EXCLUDE = [
+    # Lock files
+    "*.lock",  # yarn, poetry, uv, pdm, pixi, Cargo, Gemfile, composer, flake, Podfile
+    "package-lock.json",
+    "npm-shrinkwrap.json",
+    "pnpm-lock.yaml",
+    "bun.lockb",
+    "packages.lock.json",
+    "conda-lock.yml",
+    "*.conda-lock.yml",
+    "go.sum",
+    # Minified / build output
+    "*.min.js",
+    "*.min.css",
+    "*.map",
+]
 
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
@@ -61,14 +83,48 @@ def get_diff(pr_url: str) -> str:
     return resp.text
 
 
+def exclude_patterns() -> list[str]:
+    extra = os.environ.get("EXTRA_EXCLUDE") or ""
+    return DEFAULT_EXCLUDE + [p.strip() for p in re.split(r"[,\n]", extra) if p.strip()]
+
+
+def is_excluded(path: str, patterns: list[str]) -> bool:
+    name = path.rsplit("/", 1)[-1]
+    return any(fnmatch(path if "/" in p else name, p) for p in patterns)
+
+
+def filter_diff(diff: str) -> tuple[str, list[str]]:
+    """Drop per-file sections whose path matches an exclude pattern."""
+    patterns = exclude_patterns()
+    kept, skipped = [], []
+    # Each file's section starts with "diff --git a/<old> b/<new>".
+    for section in re.split(r"(?m)^(?=diff --git )", diff):
+        header = re.match(r"diff --git a/(.+?) b/(.+)", section)
+        if header and is_excluded(header.group(2), patterns):
+            skipped.append(header.group(2))
+        else:
+            kept.append(section)
+    return "".join(kept), skipped
+
+
 def ask_model(pr: dict, diff: str) -> str:
+    diff, skipped = filter_diff(diff)
+    if skipped:
+        print(f"Excluded from review: {', '.join(skipped)}")
     truncated = len(diff) > MAX_DIFF_CHARS
     if truncated:
         diff = diff[:MAX_DIFF_CHARS]
+    skipped_note = (
+        "Files changed but omitted from the diff (generated/lock files, do not "
+        f"review): {', '.join(skipped)}\n\n"
+        if skipped
+        else ""
+    )
     user_input = (
         f"Repository: {REPOSITORY}\n"
         f"Title: {pr['title']}\n\n"
         f"Description:\n{pr.get('body') or '(none)'}\n\n"
+        f"{skipped_note}"
         f"Diff{' (truncated)' if truncated else ''}:\n```diff\n{diff}\n```"
     )
     resp = requests.post(
