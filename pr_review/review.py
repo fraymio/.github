@@ -15,7 +15,7 @@ Env vars:
 
 import os
 import re
-from fnmatch import fnmatch
+from fnmatch import fnmatchcase
 
 import requests
 
@@ -90,18 +90,122 @@ def exclude_patterns() -> list[str]:
 
 def is_excluded(path: str, patterns: list[str]) -> bool:
     name = path.rsplit("/", 1)[-1]
-    return any(fnmatch(path if "/" in p else name, p) for p in patterns)
+    return any(fnmatchcase(path if "/" in p else name, p) for p in patterns)
 
 
-def filter_diff(diff: str) -> tuple[str, list[str]]:
+_C_ESCAPES = {
+    "a": 0x07, "b": 0x08, "f": 0x0C, "n": 0x0A,
+    "r": 0x0D, "t": 0x09, "v": 0x0B, '"': 0x22, "\\": 0x5C,
+}
+
+
+def _read_quoted(s: str, i: int) -> tuple[str, int]:
+    """Decode a Git C-style quoted string starting at s[i] == '"'.
+
+    Git escapes \\ " and control chars, and writes non-ASCII bytes as \\ooo
+    octal, so the result is decoded from UTF-8 bytes. Returns (text, index
+    just past the closing quote).
+    """
+    out = bytearray()
+    i += 1
+    while i < len(s):
+        c = s[i]
+        if c == '"':
+            return out.decode("utf-8", errors="replace"), i + 1
+        if c == "\\" and i + 1 < len(s):
+            nxt = s[i + 1]
+            if nxt in "01234567":
+                octal = re.match(r"[0-7]{1,3}", s[i + 1 :]).group()
+                out.append(int(octal, 8) & 0xFF)
+                i += 1 + len(octal)
+                continue
+            out.append(_C_ESCAPES.get(nxt, ord(nxt)))
+            i += 2
+            continue
+        out += c.encode("utf-8")
+        i += 1
+    raise ValueError(f"unterminated quoted path: {s!r}")
+
+
+def _unquote_path(raw: str) -> str:
+    """Decode one path field from a ---/+++/rename/copy header line."""
+    if raw.startswith('"'):
+        return _read_quoted(raw, 0)[0]
+    # Git appends a TAB after unquoted names that contain a space.
+    return raw.rstrip("\t")
+
+
+def _strip_prefix(path: str) -> str:
+    return path[2:] if path[:2] in ("a/", "b/") else path
+
+
+def _paths_from_git_line(rest: str) -> tuple[str, str] | None:
+    """Parse the '<a-path> <b-path>' part of a 'diff --git' line."""
+    paths, i = [], 0
+    while i < len(rest) and len(paths) < 2:
+        if rest[i] == '"':
+            path, i = _read_quoted(rest, i)
+            paths.append(path)
+            i += 1  # separating space
+        elif len(paths) == 0 and '"' in rest:
+            # Unquoted a-path followed by a quoted b-path.
+            end = rest.index(' "', i)
+            paths.append(rest[i:end])
+            i = end + 1
+        elif len(paths) == 1:
+            paths.append(rest[i:])
+            break
+        else:
+            # Both unquoted; paths may contain spaces. For non-renames the
+            # two halves are identical, which makes the split unambiguous.
+            half = (len(rest) - 1) // 2
+            a, b = rest[:half], rest[half + 1 :]
+            if rest[half] == " " and a[2:] == b[2:]:
+                return _strip_prefix(a), _strip_prefix(b)
+            m = re.match(r"(a/.+?) (b/.+)$", rest)
+            return (_strip_prefix(m.group(1)), _strip_prefix(m.group(2))) if m else None
+    if len(paths) != 2:
+        return None
+    return _strip_prefix(paths[0]), _strip_prefix(paths[1])
+
+
+def section_path(section: str) -> str | None:
+    """Return the file path a per-file diff section applies to.
+
+    Prefers the unambiguous header lines (+++, ---, rename to, copy to) over
+    the 'diff --git' line, whose two paths can't always be split apart.
+    """
+    first, *lines = section.split("\n")
+    new_path = old_path = moved_to = None
+    for line in lines:
+        if line.startswith(("@@", "Binary files ", "GIT binary patch")):
+            break  # end of the header block; content follows
+        if line.startswith("+++ "):
+            raw = line[4:]
+            if raw != "/dev/null":
+                new_path = _strip_prefix(_unquote_path(raw))
+        elif line.startswith("--- "):
+            raw = line[4:]
+            if raw != "/dev/null":
+                old_path = _strip_prefix(_unquote_path(raw))
+        elif line.startswith(("rename to ", "copy to ")):
+            moved_to = _unquote_path(line.split(" to ", 1)[1])
+    if new_path or old_path or moved_to:
+        return new_path or moved_to or old_path
+    parsed = _paths_from_git_line(first[len("diff --git ") :])
+    return parsed[1] if parsed else None
+
+
+def filter_diff(diff: str, patterns: list[str] | None = None) -> tuple[str, list[str]]:
     """Drop per-file sections whose path matches an exclude pattern."""
-    patterns = exclude_patterns()
+    if patterns is None:
+        patterns = exclude_patterns()
     kept, skipped = [], []
-    # Each file's section starts with "diff --git a/<old> b/<new>".
+    # Each file's section starts with a "diff --git" line.
     for section in re.split(r"(?m)^(?=diff --git )", diff):
-        header = re.match(r"diff --git a/(.+?) b/(.+)", section)
-        if header and is_excluded(header.group(2), patterns):
-            skipped.append(header.group(2))
+        path = section_path(section) if section.startswith("diff --git ") else None
+        if path is not None and is_excluded(path, patterns):
+            skipped.append(path)
         else:
             kept.append(section)
     return "".join(kept), skipped
