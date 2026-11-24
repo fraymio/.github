@@ -38,3 +38,14 @@ GITHUB_TOKEN=... OPENAI_API_KEY=... REPOSITORY=fraymio/tessera PR_NUMBER=123 DRY
 ## Stale PR report
 
 `stale_prs/pr_tracker.py` writes a CSV of PRs that have been open past the review SLA.
+
+## Development
+
+```sh
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+pytest          # unit tests
+pytest --int    # + integration tests
+```
+
+Tests live in `tests/`; `pytest.ini` puts `pr_review/` on the import path. Integration tests (`@pytest.mark.int`, e.g. the one that runs the real `git` binary) are skipped by default; run them with `pytest --int`. End to end tests (`@pytest.mark.e2e`) need `pytest --e2e`.
