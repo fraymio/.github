@@ -30,9 +30,8 @@ jobs:
 **Local dry run:**
 
 ```sh
-pip install -r pr_review/requirements.txt
 GITHUB_TOKEN=... OPENAI_API_KEY=... REPOSITORY=fraymio/tessera PR_NUMBER=123 DRY_RUN=true \
-  python pr_review/review.py
+  uv run pr_review/review.py
 ```
 
 ## Stale PR report
@@ -42,10 +41,9 @@ GITHUB_TOKEN=... OPENAI_API_KEY=... REPOSITORY=fraymio/tessera PR_NUMBER=123 DRY
 ## Development
 
 ```sh
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.txt
-pytest          # unit tests
-pytest --int    # + integration tests
+uv sync                # creates .venv with runtime + dev deps from uv.lock
+uv run pytest          # unit tests
+uv run pytest --int    # + integration tests
 ```
 
-Tests live in `tests/`; `pytest.ini` puts `pr_review/` on the import path. Integration tests (`@pytest.mark.int`, e.g. the one that runs the real `git` binary) are skipped by default; run them with `pytest --int`. End to end tests (`@pytest.mark.e2e`) need `pytest --e2e`.
+Dependencies are in `pyproject.toml` (dev tools in the `dev` group) and pinned in `uv.lock`; add one with `uv add <pkg>` or `uv add --dev <pkg>`. Tests live in `tests/`; `pytest.ini` puts `pr_review/` on the import path. Integration tests (`@pytest.mark.int`, e.g. the one that runs the real `git` binary) are skipped by default; run them with `pytest --int`. End to end tests (`@pytest.mark.e2e`) need `pytest --e2e`.

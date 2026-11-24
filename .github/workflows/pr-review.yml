@@ -58,17 +58,17 @@ jobs:
         with:
           repository: ${{ job.workflow_repository || 'fraymio/.github' }}
           ref: ${{ job.workflow_sha || inputs.tools_ref }}
+          # Cone mode always includes root files, so pyproject.toml and uv.lock come along.
           sparse-checkout: pr_review
           persist-credentials: false
 
-      - uses: actions/setup-python@v7
+      # setup-uv publishes no floating major tag, so pin the release commit.
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: "3.14"
 
-      - run: pip install -r pr_review/requirements.txt
-
       - name: Review PR
-        run: python pr_review/review.py
+        run: uv run --frozen --no-dev pr_review/review.py
         env:
           GITHUB_TOKEN: ${{ github.token }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
