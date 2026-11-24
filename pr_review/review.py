@@ -125,36 +125,6 @@ def _strip_prefix(path: str) -> str:
     return path[2:] if path[:2] in ("a/", "b/") else path
 
 
-def _paths_from_git_line(rest: str) -> tuple[str, str] | None:
-    """Parse the '<a-path> <b-path>' part of a 'diff --git' line."""
-    paths, i = [], 0
-    while i < len(rest) and len(paths) < 2:
-        if rest[i] == '"':
-            path, i = _read_quoted(rest, i)
-            paths.append(path)
-            i += 1  # separating space
-        elif len(paths) == 0 and '"' in rest:
-            # Unquoted a-path followed by a quoted b-path.
-            end = rest.index(' "', i)
-            paths.append(rest[i:end])
-            i = end + 1
-        elif len(paths) == 1:
-            paths.append(rest[i:])
-            break
-        else:
-            # Both unquoted; paths may contain spaces. For non-renames the
-            # two halves are identical, which makes the split unambiguous.
-            half = (len(rest) - 1) // 2
-            a, b = rest[:half], rest[half + 1 :]
-            if rest[half] == " " and a[2:] == b[2:]:
-                return _strip_prefix(a), _strip_prefix(b)
-            m = re.match(r"(a/.+?) (b/.+)$", rest)
-            return (_strip_prefix(m.group(1)), _strip_prefix(m.group(2))) if m else None
-    if len(paths) != 2:
-        return None
-    return _strip_prefix(paths[0]), _strip_prefix(paths[1])
-
-
 def section_path(section: str) -> str | None:
     """Return the file path a per-file diff section applies to.
 
@@ -178,8 +148,15 @@ def section_path(section: str) -> str | None:
             moved_to = _unquote_path(line.split(" to ", 1)[1])
     if new_path or old_path or moved_to:
         return new_path or moved_to or old_path
-    parsed = _paths_from_git_line(first[len("diff --git ") :])
-    return parsed[1] if parsed else None
+    # Renames/copies have explicit headers above. Otherwise Git names the same
+    # path twice, so split equal-length fields even when the names contain spaces.
+    rest = first[len("diff --git ") :]
+    half = len(rest) // 2
+    if rest[half : half + 1] != " ":
+        return None
+    old_path = _strip_prefix(_unquote_path(rest[:half]))
+    new_path = _strip_prefix(_unquote_path(rest[half + 1 :]))
+    return new_path if old_path == new_path else None
 
 
 def filter_diff(diff: str, patterns: list[str] | None = None) -> tuple[str, list[str]]:
