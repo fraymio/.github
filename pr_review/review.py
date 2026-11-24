@@ -26,6 +26,7 @@ MAX_DIFF_CHARS = 400_000
 DEFAULT_EXCLUDE = [
     # Lock files
     "*.lock",  # yarn, poetry, uv, pdm, pixi, Cargo, Gemfile, composer, flake, Podfile
+    "terraform.lock.hcl",  # Terraform lock file
     "package-lock.json",
     "npm-shrinkwrap.json",
     "pnpm-lock.yaml",
@@ -94,8 +95,15 @@ def is_excluded(path: str, patterns: list[str]) -> bool:
 
 
 _C_ESCAPES = {
-    "a": 0x07, "b": 0x08, "f": 0x0C, "n": 0x0A,
-    "r": 0x0D, "t": 0x09, "v": 0x0B, '"': 0x22, "\\": 0x5C,
+    "a": 0x07,
+    "b": 0x08,
+    "f": 0x0C,
+    "n": 0x0A,
+    "r": 0x0D,
+    "t": 0x09,
+    "v": 0x0B,
+    '"': 0x22,
+    "\\": 0x5C,
 }
 
 
