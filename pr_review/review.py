@@ -13,6 +13,7 @@ Env vars:
   DRY_RUN           if "true", print the review instead of posting it
 """
 
+import codecs
 import os
 import re
 from fnmatch import fnmatchcase
@@ -94,45 +95,22 @@ def is_excluded(path: str, patterns: list[str]) -> bool:
     return any(fnmatchcase(path if "/" in p else name, p) for p in patterns)
 
 
-_C_ESCAPES = {
-    "a": 0x07,
-    "b": 0x08,
-    "f": 0x0C,
-    "n": 0x0A,
-    "r": 0x0D,
-    "t": 0x09,
-    "v": 0x0B,
-    '"': 0x22,
-    "\\": 0x5C,
-}
+_QUOTED = re.compile(r'"((?:[^"\\]|\\.)*)"')
 
 
 def _read_quoted(s: str, i: int) -> tuple[str, int]:
     """Decode a Git C-style quoted string starting at s[i] == '"'.
 
-    Git escapes \\ " and control chars, and writes non-ASCII bytes as \\ooo
-    octal, so the result is decoded from UTF-8 bytes. Returns (text, index
-    just past the closing quote).
+    Returns (text, index just past the closing quote).
     """
-    out = bytearray()
-    i += 1
-    while i < len(s):
-        c = s[i]
-        if c == '"':
-            return out.decode("utf-8", errors="replace"), i + 1
-        if c == "\\" and i + 1 < len(s):
-            nxt = s[i + 1]
-            if nxt in "01234567":
-                octal = re.match(r"[0-7]{1,3}", s[i + 1 :]).group()
-                out.append(int(octal, 8) & 0xFF)
-                i += 1 + len(octal)
-                continue
-            out.append(_C_ESCAPES.get(nxt, ord(nxt)))
-            i += 2
-            continue
-        out += c.encode("utf-8")
-        i += 1
-    raise ValueError(f"unterminated quoted path: {s!r}")
+    m = _QUOTED.match(s, i)
+    if not m:
+        raise ValueError(f"unterminated quoted path: {s!r}")
+    # Git escapes \\ \" and control chars, and writes non-ASCII bytes as \ooo
+    # octal. unicode_escape decodes those same escapes but yields each byte as
+    # a Latin-1 char, so round-trip through Latin-1 to get the raw bytes back.
+    latin1 = codecs.decode(m.group(1).encode("utf-8"), "unicode_escape")
+    return latin1.encode("latin-1").decode("utf-8", errors="replace"), m.end()
 
 
 def _unquote_path(raw: str) -> str:
