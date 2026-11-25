@@ -1,0 +1,17 @@
+[project]
+name = "fraymio-github"
+version = "0.1.0"
+description = "Org-wide GitHub tooling for fraymio (AI PR review, stale PR report)"
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.31",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
+
+[tool.uv]
+# Scripts, not an installable package.
+package = false
